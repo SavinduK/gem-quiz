@@ -16,6 +16,7 @@ export default function Settings() {
   const [apiKey, setApiKey] = useState('');
   const [qCount, setQCount] = useState<number>(5);
   const [qStyle, setQStyle] = useState<'MCQ' | 'TF'>('MCQ');
+  const [customPrompt, setCustomPrompt] = useState('');
   
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -30,11 +31,12 @@ export default function Settings() {
         if (lines[0]) setApiKey(lines[0].trim());
         if (lines[1]) setQCount(parseInt(lines[1].trim(), 10) || 5);
         if (lines[2]) setQStyle(lines[2].trim() === 'TF' ? 'TF' : 'MCQ');
+        if (lines[3]) setCustomPrompt(lines[3].trim());
       }
     } catch (e) {
       console.error("Failed to load settings:", e);
     } finally {
-      setLoading(false);
+      loading && setLoading(false);
     }
   };
 
@@ -48,7 +50,9 @@ export default function Settings() {
     setIsSaving(true);
     try {
       const cleanKey = apiKey.trim();
-      const configPayload = `${cleanKey}\n${qCount}\n${qStyle}`;
+      const cleanPrompt = customPrompt.trim();
+      // Added custom prompt as the 4th line in the plain-text configuration payload
+      const configPayload = `${cleanKey}\n${qCount}\n${qStyle}\n${cleanPrompt}`;
       await FileSystem.writeAsStringAsync(KEY_FILE_URI, configPayload);
       
       Alert.alert("Success", "Configuration preferences updated successfully.");
@@ -72,10 +76,10 @@ export default function Settings() {
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-          <Text style={[styles.sectionTitle, { color: theme.accent }]}>AI Engine Configuration</Text>
           
-          <View style={[styles.configCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            {/* API KEY INPUT */}
+          {/* CARD 1: AI ENGINE CREDENTIALS */}
+          <Text style={[styles.sectionTitle, { color: theme.accent }]}>AI Engine Configuration</Text>
+          <View style={[styles.configCard, { backgroundColor: theme.card, borderColor: theme.border, marginBottom: 20 }]}>
             <View style={styles.labelRow}>
               <FontAwesome5 name="key" size={14} color={theme.subtext} style={{ marginRight: 8 }} />
               <Text style={[styles.inputLabel, { color: theme.title }]}>Gemini API Key</Text>
@@ -90,9 +94,13 @@ export default function Settings() {
               autoCorrect={false}
               secureTextEntry={true} 
             />
-            
+          </View>
+
+          {/* CARD 2: QUIZ GENERATION SETTINGS */}
+          <Text style={[styles.sectionTitle, { color: theme.accent }]}>Quiz Architecture Settings</Text>
+          <View style={[styles.configCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             {/* QUESTION COUNT SELECTOR */}
-            <Text style={[styles.inputLabel, { color: theme.title, marginTop: 10 }]}>Number of Questions</Text>
+            <Text style={[styles.inputLabel, { color: theme.title }]}>Number of Questions</Text>
             <View style={styles.segmentedControl}>
               {[5, 10, 15, 20].map((num) => (
                 <Pressable
@@ -121,6 +129,22 @@ export default function Settings() {
                 <Text style={[styles.segmentText, { color: qStyle === 'TF' ? '#fff' : theme.title }]}>T/F Style</Text>
               </Pressable>
             </View>
+
+            {/* CUSTOM SYSTEM PROMPT */}
+            <View style={[styles.labelRow, { marginTop: 10 }]}>
+              <FontAwesome5 name="terminal" size={12} color={theme.subtext} style={{ marginRight: 8 }} />
+              <Text style={[styles.inputLabel, { color: theme.title }]}>Custom Generation Instructions</Text>
+            </View>
+            <TextInput
+              style={[styles.textArea, { color: theme.title, borderColor: theme.border, backgroundColor: theme.background }]}
+              placeholder="e.g., Focus heavily on clinical diagnostics, keep tone academic..."
+              placeholderTextColor={theme.subtext}
+              value={customPrompt}
+              onChangeText={setCustomPrompt}
+              multiline={true}
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
 
             <Text style={[styles.hintText, { color: theme.subtext, marginTop: 8 }]}>
               Preferences are written locally to configure parsing pipelines for custom study metrics.
@@ -154,11 +178,12 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   content: { flex: 1, paddingHorizontal: 25, paddingTop: 10 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  sectionTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 15, marginLeft: 5 },
+  sectionTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginLeft: 5 },
   configCard: { padding: 22, borderRadius: 24, borderWidth: 1, gap: 12 },
   labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
   inputLabel: { fontSize: 14, fontWeight: '700' },
   input: { height: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, fontSize: 14 },
+  textArea: { minHeight: 90, borderRadius: 14, borderWidth: 1, padding: 14, fontSize: 14, lineHeight: 20 },
   segmentedControl: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 4, gap: 4 },
   segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
   segmentText: { fontSize: 13, fontWeight: '600' },

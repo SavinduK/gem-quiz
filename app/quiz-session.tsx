@@ -1,4 +1,5 @@
 import { FontAwesome5 } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -118,6 +119,7 @@ export default function QuestionSession() {
       let activeApiKey = FALLBACK_GEMINI_API_KEY;
       let targetCount = 5;
       let targetStyle = 'MCQ';
+      let customPrompt = "";
 
       try {
         const keyFileCheck = await FileSystem.getInfoAsync(KEY_FILE_URI);
@@ -126,6 +128,7 @@ export default function QuestionSession() {
           if (lines[0]) activeApiKey = lines[0].trim();
           if (lines[1]) targetCount = parseInt(lines[1].trim(), 10) || 5;
           if (lines[2]) targetStyle = lines[2].trim() === 'TF' ? 'TF' : 'MCQ';
+          if (lines[3]) customPrompt = lines[3].trim();
         }
       } catch (keyError) {
         console.warn("Relying on default configurations.", keyError);
@@ -136,9 +139,9 @@ export default function QuestionSession() {
       
       let prompt = "";
       if (targetStyle === 'MCQ') {
-        prompt = `Based on the following source material text, generate exactly ${targetCount} multiple choice questions. Each question must have exactly 5 distinct options. Return the data strictly as a JSON object containing an array called "questions". Each item in the array must contain "question" (string), "options" (array of 5 strings), and "correct_answer" (string matching exactly one of the options).\nSource material text:${targetStr}`;
+        prompt = `Based on the following source material text, generate exactly ${targetCount} multiple choice questions. Each question must have exactly 5 distinct options. Return the data strictly as a JSON object containing an array called "questions". Each item in the array must contain "question" (string), "options" (array of 5 strings), and "correct_answer" (string matching exactly one of the options).${customPrompt} \nSource material text:${targetStr}`;
       } else {
-        prompt = `Based on the following source material text, generate exactly ${targetCount} True/False style questions. Each item must contain a header topic text called "question", and an array of exactly 5 distinct conceptual statements related to it. For each statement, provide its corresponding boolean true/false answer value. Return data strictly as a JSON object containing an array called "questions". Structure: {"questions": [{"question": "string context", "statements": ["s1", "s2", "s3", "s4", "s5"], "answers": [true, false, true, true, false]}]}.\nSource material text:${targetStr}`;
+        prompt = `Based on the following source material text, generate exactly ${targetCount} True/False style questions. Each item must contain a header topic text called "question", and an array of exactly 5 distinct conceptual statements related to it. For each statement, provide its corresponding boolean true/false answer value. Return data strictly as a JSON object containing an array called "questions". Structure: {"questions": [{"question": "string context", "statements": ["s1", "s2", "s3", "s4", "s5"], "answers": [true, false, true, true, false]}]}.${customPrompt} \nSource material text:${targetStr}`;
       }
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeApiKey}`, {
@@ -227,6 +230,11 @@ export default function QuestionSession() {
 
   const maxPossibleScore = activeDeck ? (isTFQuiz ? activeDeck.length * 5 : activeDeck.length) : 0;
 
+  const copyToClipboard = async(filename:string) =>{
+    const targetStr = await FileSystem.readAsStringAsync(`${QUESTIONS_DIR}${filename}`);
+    Clipboard.setStringAsync(targetStr);
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
@@ -268,7 +276,7 @@ export default function QuestionSession() {
                             <Text style={[styles.lessonTitle, { color: theme.title }]}>{les.lesson}</Text>
                             <Text style={{ color: theme.subtext, fontSize: 12 }}>{les.subject} • {les.term}</Text>
                           </View>
-                          <FontAwesome5 name="chevron-right" size={14} color={theme.border} />
+                          <FontAwesome5 name="copy" size={16} color={theme.title} onPress={()=>{copyToClipboard(les.filename)}} />
                         </Pressable>
                         <Pressable style={styles.deleteBtn} onPress={() => { setTargetFilename(les.filename); setDeleteModalVisible(true); }}>
                           <FontAwesome5 name="trash" size={14} color={theme.delete} />

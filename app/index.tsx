@@ -4,12 +4,15 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Footer from './footer';
-import { Colors } from './theme';
+import Footer from './components/footer';
+import Header from './components/header';
+import QuizCard from './components/quiz-card';
+import { Colors } from './constants/theme';
 
 const CACHE_DIR = `${FileSystem.documentDirectory}cached-questions/`;
+const KEY_FILE_URI = `${FileSystem.documentDirectory}key.txt`;
 
-type QuestionType = 'all' | 'mcq' | 'tf';
+type QuestionType = 'mcq' | 'tf';
 
 export default function HomeFeed() {
   const router = useRouter();
@@ -21,10 +24,23 @@ export default function HomeFeed() {
   
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<QuestionType>('all');
+  const [selectedType, setSelectedType] = useState<QuestionType>('mcq');
 
   const [compiledPool, setCompiledPool] = useState<any[]>([]);
-  const [quizAnswers, setQuizAnswers] = useState<{ [key: number]: string }>({});
+  const [quizFinished, setQuizFinished] = useState<boolean>(false);
+  
+  // Dynamic pool limit state parsed from second line of key.txt (Defaults to 5)
+  const [maxQuestionsCount, setMaxQuestionsCount] = useState<number>(5);
+  
+  // Single Card Operational State Managers
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
+  const [runningScore, setRunningScore] = useState<number>(0);
+  const [chosenAnswer, setChosenAnswer] = useState<string | null>(null);
+  
+  // True/False granular breakdown evaluation tracking states
+  const [tfSelections, setTfSelections] = useState<{ [key: number]: boolean | null }>({ 0: null, 1: null, 2: null, 3: null, 4: null });
+  const [tfChecked, setTfChecked] = useState<boolean>(false);
+  const [tfQuestionScore, setTfQuestionScore] = useState<number>(0);
 
   const [subPickerVisible, setSubPickerVisible] = useState(false);
   const [termPickerVisible, setTermPickerVisible] = useState(false);
@@ -32,6 +48,21 @@ export default function HomeFeed() {
 
   const fetchAvailableDecks = async () => {
     try {
+      // --- Read target question count bounds configurations from key.txt ---
+      const keyFileInfo = await FileSystem.getInfoAsync(KEY_FILE_URI);
+      if (keyFileInfo.exists) {
+        const keyFileContent = await FileSystem.readAsStringAsync(KEY_FILE_URI);
+        if (keyFileContent) {
+          const lines = keyFileContent.split(/\r?\n/);
+          if (lines.length >= 2) {
+            const parsedCount = parseInt(lines[1].trim(), 10);
+            if (!isNaN(parsedCount) && parsedCount > 0) {
+              setMaxQuestionsCount(parsedCount);
+            }
+          }
+        }
+      }
+
       const folderInfo = await FileSystem.getInfoAsync(CACHE_DIR);
       if (!folderInfo.exists) return;
 
@@ -54,7 +85,7 @@ export default function HomeFeed() {
       }
       setSubjects(Array.from(uniqueSubjects));
       setTerms(Array.from(uniqueTerms));
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Error reading data file systems:", e); }
   };
 
   const generateRandomSession = async () => {
@@ -63,6 +94,7 @@ export default function HomeFeed() {
       if (!folderInfo.exists) return;
 
       const files = await FileSystem.readDirectoryAsync(CACHE_DIR);
+      console.log(files)
       let rawQuestions: any[] = [];
 
       for (const file of files) {
@@ -80,85 +112,110 @@ export default function HomeFeed() {
 
           if (matchSubject && matchTerm) {
             const rawContent = await FileSystem.readAsStringAsync(`${CACHE_DIR}${file}`);
-            const parsed = JSON.parse(rawContent);
-            let questionsList: any[] = [];
-            
-            if (Array.isArray(parsed)) {
-              questionsList = parsed;
-            } else if (parsed && Array.isArray(parsed.questions)) {
-              questionsList = parsed.questions;
-            }
+            if (!rawContent || rawContent.trim() === '') continue;
 
-            // Filter by question type (MCQ vs True/False)
-            if (selectedType !== 'all') {
+            try {
+              const parsed = JSON.parse(rawContent);
+              let questionsList: any[] = [];
+              
+              if (Array.isArray(parsed)) {
+                questionsList = parsed;
+              } else if (parsed && Array.isArray(parsed.questions)) {
+                questionsList = parsed.questions;
+              }
+
               questionsList = questionsList.filter(q => {
-                // Infers type from explicit 'type' key or structure of options
                 const qType = q.type?.toLowerCase() || (q.options?.length === 2 ? 'tf' : 'mcq');
                 return qType === selectedType;
               });
-            }
 
-            rawQuestions.push(...questionsList);
+              rawQuestions.push(...questionsList);
+            } catch (err) { console.error(err); }
           }
         }
       }
 
-      setCompiledPool(rawQuestions.sort(() => 0.5 - Math.random()).slice(0, 5));
-      setQuizAnswers({});
+      // Dynamic slicing calculation mapped to configured file states
+      setCompiledPool(rawQuestions.sort(() => 0.5 - Math.random()).slice(0, maxQuestionsCount));
+      resetQuizSessionState();
     } catch (e) { console.error(e); }
   };
 
+  const resetQuizSessionState = () => {
+    setCurrentQuestionIndex(0);
+    setRunningScore(0);
+    setQuizFinished(false);
+    setChosenAnswer(null);
+    setTfSelections({ 0: null, 1: null, 2: null, 3: null, 4: null });
+    setTfChecked(false);
+    setTfQuestionScore(0);
+  };
+
   useFocusEffect(useCallback(() => { fetchAvailableDecks(); }, []));
-  useFocusEffect(useCallback(() => { generateRandomSession(); }, [selectedSubject, selectedTerm, selectedType]));
+  useFocusEffect(useCallback(() => { generateRandomSession(); }, [selectedSubject, selectedTerm, selectedType, maxQuestionsCount]));
+
+  const evaluateTfQuestion = () => {
+    if (compiledPool.length === 0) return;
+    const currentQ = compiledPool[currentQuestionIndex];
+    let calculatedQScore = 0;
+
+    for (let i = 0; i < 5; i++) {
+      const selected = tfSelections[i];
+      const realAnswer = currentQ.answers?.[i];
+
+      if (selected !== null && selected !== undefined) {
+        if (selected === realAnswer) {
+          calculatedQScore += 1;
+        } else {
+          calculatedQScore -= 1;
+        }
+      }
+    }
+
+    const finalClampedQScore = Math.max(0, calculatedQScore);
+    setTfQuestionScore(finalClampedQScore);
+    setRunningScore(p => p + finalClampedQScore);
+    setTfChecked(true);
+  };
+
+  const handleNextQuestion = () => {
+    if (currentQuestionIndex + 1 < compiledPool.length) {
+      setCurrentQuestionIndex(prev => prev + 1);
+      setChosenAnswer(null);
+      setTfSelections({ 0: null, 1: null, 2: null, 3: null, 4: null });
+      setTfChecked(false);
+      setTfQuestionScore(0);
+    } else {
+      setQuizFinished(true);
+    }
+  };
 
   const getTypeLabel = (type: QuestionType) => {
-    if (type === 'mcq') return 'MCQs Only';
-    if (type === 'tf') return 'T/F Only';
-    return 'All Types';
+    return type === 'mcq' ? 'MCQs Only' : 'T/F Only';
   };
+
+  const maxPossibleScore = selectedType === 'tf' ? compiledPool.length * 5 : compiledPool.length;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar barStyle={colorScheme === 'dark' ? "light-content" : "dark-content"} />
 
-      <View style={styles.header}>
-        <View>
-          <Text style={[styles.headerTitle, { color: theme.title }]}>Daily Flash-Quizzes</Text>
-        </View>
-        <Pressable style={[styles.addBtn, { backgroundColor: theme.accent }]} onPress={() => router.push('/add-questions')}>
-          <FontAwesome5 name="plus" size={16} color="white" />
-        </Pressable>
-      </View>
+      <Header title="Daily Flash-Quizzes" onRightButtonPress={() => router.push('/add-questions')} />
 
-      {/* THREE COLUMN DROPDOWN PICKERS */}
+      {/* FILTERS DROPDOWN COMPONENT BASE */}
       <View style={styles.dropdownRow}>
-        <Pressable 
-          style={[styles.dropdown, { backgroundColor: theme.card, borderColor: theme.border }]} 
-          onPress={() => setSubPickerVisible(true)}
-        >
-          <Text style={[styles.dropdownText, { color: theme.title }]} numberOfLines={1}>
-            {selectedSubject ?? "Subjects"}
-          </Text>
+        <Pressable style={[styles.dropdown, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => setSubPickerVisible(true)}>
+          <Text style={[styles.dropdownText, { color: theme.title }]} numberOfLines={1}>{selectedSubject ?? "All Subjects"}</Text>
           <FontAwesome5 name="chevron-down" size={10} color={theme.subtext} />
         </Pressable>
 
-        <Pressable 
-          style={[styles.dropdown, { backgroundColor: theme.card, borderColor: theme.border }]} 
-          onPress={() => setTermPickerVisible(true)}
-        >
-          <Text style={[styles.dropdownText, { color: theme.title }]} numberOfLines={1}>
-            {selectedTerm ?? "Terms"}
-          </Text>
+        <Pressable style={[styles.dropdown, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => setTermPickerVisible(true)}>
+          <Text style={[styles.dropdownText, { color: theme.title }]} numberOfLines={1}>{selectedTerm ?? "All Terms"}</Text>
           <FontAwesome5 name="chevron-down" size={10} color={theme.subtext} />
         </Pressable>
 
-        <Pressable 
-          style={[styles.dropdown, { backgroundColor: theme.card, borderColor: theme.border }]} 
-          onPress={() => setTypePickerVisible(true)}
-        >
-          <Text style={[styles.dropdownText, { color: theme.title }]} numberOfLines={1}>
-            {getTypeLabel(selectedType)}
-          </Text>
+        <Pressable style={[styles.dropdown, { backgroundColor: theme.card, borderColor: theme.border }]} onPress={() => setTypePickerVisible(true)}>
+          <Text style={[styles.dropdownText, { color: theme.title }]} numberOfLines={1}>{getTypeLabel(selectedType)}</Text>
           <FontAwesome5 name="chevron-down" size={10} color={theme.subtext} />
         </Pressable>
       </View>
@@ -169,69 +226,50 @@ export default function HomeFeed() {
             <FontAwesome5 name="graduation-cap" size={50} color={theme.border} />
             <Text style={[styles.emptyText, { color: theme.subtext }]}>No datasets matched selection.</Text>
           </View>
-        ) : (
-          <View>
-            {/* INLINE QUIZ QUESTIONS */}
-            {compiledPool.map((item, qIdx) => {
-              const chosen = quizAnswers[qIdx];
-              // Normalize options for T/F if they aren't explicitly provided arrays
-              const options: string[] = item.options || ["True", "False"];
-
-              return (
-                <View key={qIdx} style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <Text style={[styles.quizQuestion, { color: theme.title }]}>{qIdx + 1}. {item.question}</Text>
-                  
-                  {options.map((option: string, oIdx: number) => {
-                    const isSelected = chosen === option;
-                    const isCorrect = option.toLowerCase() === String(item.correct_answer).toLowerCase();
-                    
-                    let optionBg = 'transparent';
-                    let optionBorder = theme.border;
-
-                    if (chosen) {
-                      if (isCorrect) {
-                        optionBg = 'rgba(74, 222, 128, 0.15)'; 
-                        optionBorder = '#4ade80';
-                      } else if (isSelected) {
-                        optionBg = 'rgba(248, 113, 113, 0.15)'; 
-                        optionBorder = '#f87171';
-                      }
-                    } else if (isSelected) {
-                      optionBg = theme.background;
-                    }
-
-                    return (
-                      <Pressable
-                        key={oIdx}
-                        disabled={!!chosen}
-                        style={[styles.optionButton, { backgroundColor: optionBg, borderColor: optionBorder }]}
-                        onPress={() => setQuizAnswers(p => ({ ...p, [qIdx]: option }))}
-                      >
-                        <Text style={[styles.optionText, { color: theme.title, fontWeight: isSelected ? '700' : '400' }]}>
-                          {option}
-                        </Text>
-                        {chosen && isCorrect && <FontAwesome5 name="check-circle" size={14} color="#4ade80" />}
-                        {chosen && isSelected && !isCorrect && <FontAwesome5 name="times-circle" size={14} color="#f87171" />}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              );
-            })}
+        ) : quizFinished ? (
+          <View style={styles.emptyContainer}>
+            <FontAwesome5 name="check-double" size={50} color="#4ade80" />
+            <Text style={[styles.emptyText, { color: theme.title, fontSize: 18, fontWeight: '700' }]}>Quiz Finished!</Text>
             
-            {/* REFRESH BUTTON */}
+            <View style={[styles.scoreContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.scoreText, { color: theme.title }]}>
+                Final Score: <Text style={{ color: theme.accent }}>{runningScore}</Text> / {maxPossibleScore}
+              </Text>
+            </View>
+
             <Pressable 
               style={[styles.refreshButton, { backgroundColor: theme.card, borderColor: theme.accent }]}
               onPress={generateRandomSession}
             >
-              <FontAwesome5 name="sync-alt" size={14} color={theme.accent} style={{ marginRight: 8 }} />
-              <Text style={[styles.refreshButtonText, { color: theme.accent }]}>Refresh Questions</Text>
+              <FontAwesome5 name="redo" size={14} color={theme.accent} style={{ marginRight: 8 }} />
+              <Text style={[styles.refreshButtonText, { color: theme.accent }]}>Start New Session</Text>
             </Pressable>
           </View>
+        ) : (
+          /* SINGLE CARD INTERACTION INJECTOR MODULE */
+          <QuizCard
+            item={compiledPool[currentQuestionIndex]}
+            chosenAnswer={chosenAnswer}
+            runningScore={runningScore}
+            maxPossibleScore={maxPossibleScore}
+            setChosenAnswer={(answer) => {
+              // Isolated point evaluation safely inside the individual card component
+              setChosenAnswer(answer);
+            }}
+            setRunningScore={setRunningScore}
+            tfSelections={tfSelections}
+            setTfSelections={setTfSelections}
+            tfChecked={tfChecked}
+            tfQuestionScore={tfQuestionScore}
+            evaluateTfQuestion={evaluateTfQuestion}
+            handleNextQuestion={handleNextQuestion}
+            currentQuestionIdx={currentQuestionIndex}
+            totalQuestions={compiledPool.length}
+          />
         )}
       </ScrollView>
 
-      {/* SUBJECT SELECTION MODAL */}
+      {/* MODAL CONFIGURATIONS */}
       <Modal visible={subPickerVisible} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setSubPickerVisible(false)}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -250,7 +288,6 @@ export default function HomeFeed() {
         </Pressable>
       </Modal>
 
-      {/* TERM SELECTION MODAL */}
       <Modal visible={termPickerVisible} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setTermPickerVisible(false)}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
@@ -269,15 +306,11 @@ export default function HomeFeed() {
         </Pressable>
       </Modal>
 
-      {/* TYPE SELECTION MODAL */}
       <Modal visible={typePickerVisible} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setTypePickerVisible(false)}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <Text style={[styles.modalTitle, { color: theme.title }]}>Select Question Type</Text>
             <ScrollView style={{ width: '100%', maxHeight: 300 }}>
-              <Pressable style={styles.modalItem} onPress={() => { setSelectedType('all'); setTypePickerVisible(false); }}>
-                <Text style={{ color: theme.accent, fontWeight: '700' }}>All Types</Text>
-              </Pressable>
               <Pressable style={styles.modalItem} onPress={() => { setSelectedType('mcq'); setTypePickerVisible(false); }}>
                 <Text style={{ color: theme.title, fontWeight: '500' }}>Multiple Choice (MCQs)</Text>
               </Pressable>
@@ -296,23 +329,18 @@ export default function HomeFeed() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, paddingTop: 20 },
-  headerTitle: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
-  addBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   dropdownRow: { flexDirection: 'row', paddingHorizontal: 25, marginVertical: 15, gap: 8 },
   dropdown: { flex: 1, height: 46, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 },
   dropdownText: { fontSize: 12, fontWeight: '600', flex: 1, marginRight: 4 },
   scroll: { flex: 1, paddingHorizontal: 20 },
-  emptyContainer: { alignItems: 'center', marginTop: 80 },
+  emptyContainer: { alignItems: 'center', marginTop: 80, width: '100%' },
   emptyText: { marginTop: 15, fontSize: 15, fontWeight: '500' },
+  scoreContainer: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16, borderWidth: 1, marginVertical: 15 },
+  scoreText: { fontSize: 16, fontWeight: '700' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '80%', borderRadius: 24, padding: 20, alignItems: 'center' },
   modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 15 },
   modalItem: { width: '100%', paddingVertical: 14, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
-  quizCard: { padding: 20, borderRadius: 22, borderWidth: 1, marginBottom: 16 },
-  quizQuestion: { fontSize: 16, fontWeight: '700', marginBottom: 15, lineHeight: 22 },
-  optionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
-  optionText: { fontSize: 14, flex: 1, paddingRight: 10 },
   refreshButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 48, borderRadius: 14, borderWidth: 1, marginTop: 10, marginBottom: 30, width: '100%' },
-  refreshButtonText: { fontSize: 15, fontWeight: '700' }
+  refreshButtonText: { fontSize: 15, fontWeight: '700' },
 });

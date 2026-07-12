@@ -4,8 +4,8 @@ import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Footer from './footer';
-import { Colors } from './theme';
+import Footer from './components/footer';
+import { Colors } from './constants/theme';
 
 const KEY_FILE_URI = `${FileSystem.documentDirectory}key.txt`;
 

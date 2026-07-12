@@ -2,7 +2,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
-import { Colors } from './theme';
+import { Colors } from '../constants/theme';
 
 export default function Footer() {
   const router = useRouter();

@@ -1,8 +1,9 @@
+import { FontAwesome5 } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DeleteModal from './components/delete-model';
 import Footer from './components/footer';
@@ -39,13 +40,14 @@ export default function QuestionSession() {
   const theme = Colors[colorScheme ?? 'light'];
 
   const [filesMeta, setFilesMeta] = useState<TargetFile[]>([]);
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
-  const [selectedTerm, setSelectedTerm] = useState<string | null>(null);
-  
   const [loading, setLoading] = useState(false);
   const [activeDeck, setActiveDeck] = useState<MCQQuestion[] | null>(null);
   const [isTFQuiz, setIsTFQuiz] = useState<boolean>(false);
   
+  // Reading View State
+  const [readingFile, setReadingFile] = useState<TargetFile | null>(null);
+  const [readingContent, setReadingContent] = useState<string>("");
+
   // Single Question Display & Quiz State Indexes
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState<number>(0);
   const [runningScore, setRunningScore] = useState<number>(0);
@@ -57,8 +59,6 @@ export default function QuestionSession() {
   const [tfChecked, setTfChecked] = useState<boolean>(false);
   const [tfQuestionScore, setTfQuestionScore] = useState<number>(0); 
 
-  const [subModalVisible, setSubModalVisible] = useState(false);
-  const [termModalVisible, setTermModalVisible] = useState(false);
   const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const [targetFilename, setTargetFilename] = useState<string | null>(null);
 
@@ -88,10 +88,6 @@ export default function QuestionSession() {
 
   useFocusEffect(useCallback(() => { indexLocalFiles(); }, []));
 
-  const uniqueSubjects = Array.from(new Set(filesMeta.map(f => f.subject)));
-  const uniqueTerms = Array.from(new Set(filesMeta.filter(f => f.subject === selectedSubject).map(f => f.term)));
-  const availableLessons = filesMeta.filter(f => f.subject === selectedSubject && f.term === selectedTerm);
-
   const handleDeleteFile = async () => {
     if (!targetFilename) return;
     try {
@@ -103,8 +99,27 @@ export default function QuestionSession() {
       if (cacheCheck.exists) await FileSystem.deleteAsync(cacheUri, { idempotent: true });
       setDeleteModalVisible(false);
       setTargetFilename(null);
+      if (readingFile?.filename === targetFilename) {
+        setReadingFile(null);
+        setReadingContent("");
+      }
       indexLocalFiles();
     } catch (e) { console.error(e); }
+  };
+
+  // Callback to load file and activate Reading View
+  const openLessonReader = async (file: TargetFile) => {
+    setLoading(true);
+    try {
+      const content = await FileSystem.readAsStringAsync(`${QUESTIONS_DIR}${file.filename}`);
+      setReadingFile(file);
+      setReadingContent(content);
+    } catch (e) {
+      console.error(e);
+      Alert.alert("Error", "Could not load lesson contents.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const launchDeck = async (filename: string) => {
@@ -161,7 +176,6 @@ export default function QuestionSession() {
       const resData = await response.json();
       const rawJsonText = resData.candidates[0].content.parts[0].text;
       
-      // Ensure Cache Directory Exists and save locally
       const cacheDirCheck = await FileSystem.getInfoAsync(CACHE_DIR);
       if (!cacheDirCheck.exists) {
         await FileSystem.makeDirectoryAsync(CACHE_DIR, { intermediates: true });
@@ -170,6 +184,8 @@ export default function QuestionSession() {
 
       const parsedQuiz = JSON.parse(rawJsonText);
       let targetDeck: MCQQuestion[] = parsedQuiz.questions || parsedQuiz;
+      
+      setReadingFile(null); 
       setActiveDeck(targetDeck);
 
     } catch (e) { 
@@ -181,6 +197,8 @@ export default function QuestionSession() {
           const rawCachedText = await FileSystem.readAsStringAsync(specificCacheUri);
           const parsedCache = JSON.parse(rawCachedText);
           let targetDeck: MCQQuestion[] = parsedCache.questions || parsedCache;
+          
+          setReadingFile(null);
           setActiveDeck(targetDeck);
           Alert.alert("Offline Mode Active", "Loaded previously compiled questions from cache filesystem successfully.");
         } else {
@@ -235,88 +253,123 @@ export default function QuestionSession() {
 
   const maxPossibleScore = activeDeck ? (isTFQuiz ? activeDeck.length * 5 : activeDeck.length) : 0;
 
-  const copyToClipboard = async(filename:string) =>{
+  const copyToClipboard = async (filename: string) => {
     const targetStr = await FileSystem.readAsStringAsync(`${QUESTIONS_DIR}${filename}`);
-    Clipboard.setStringAsync(targetStr);
-  }
+    await Clipboard.setStringAsync(targetStr);
+  };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-    <Header title="Lecture Questions" onRightButtonPress={() => router.push('/add-questions')} />
+      <Header title="Lecture Questions" onRightButtonPress={() => router.push('/add-questions')} />
 
-    {/* 1. Global Loading State (Highest Priority) */}
-    {loading && (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.accent} />
-        <Text style={{ color: theme.subtext, marginTop: 12, fontWeight: '500' }}>Compiling Engine Questions...</Text>
-      </View>
-    )}
-
-    {/* 2. Selection View: No active deck, and not loading */}
-    {!loading && !activeDeck && (
-      <ModuleSelector
-        availableLessons={filesMeta}
-        launchDeck={launchDeck}
-        copyToClipboard={copyToClipboard}
-        onSelectDeleteTarget={(filename) => { setTargetFilename(filename); setDeleteModalVisible(true); }}
-      />
-    )}
-
-    {/* 3. Quiz Game View: Active deck is running */}
-    {!loading && activeDeck && (
-      <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-        <View>
-          {quizFinished ? (
-            <QuizResults  
-              runningScore={runningScore} 
-              maxPossibleScore={maxPossibleScore} 
-              onReturn={() => setActiveDeck(null)} 
-            />
-          ) : (
-            <QuizCard
-              item={activeDeck[currentQuestionIdx]}
-              chosenAnswer={chosenAnswer}
-              runningScore={runningScore}
-              maxPossibleScore={maxPossibleScore}
-              setChosenAnswer={setChosenAnswer}
-              setRunningScore={setRunningScore}
-              tfSelections={tfSelections}
-              setTfSelections={setTfSelections}
-              tfChecked={tfChecked}
-              tfQuestionScore={tfQuestionScore}
-              evaluateTfQuestion={evaluateTfQuestion}
-              handleNextQuestion={handleNextQuestion}
-              currentQuestionIdx={currentQuestionIdx}
-              totalQuestions={activeDeck.length}
-            />
-          )}
+      {/* 1. Global Loading State */}
+      {loading && (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.accent} />
+          <Text style={{ color: theme.subtext, marginTop: 12, fontWeight: '500' }}>Compiling Questions...</Text>
         </View>
-      </ScrollView>
-    )}
+      )}
 
-    <DeleteModal visible={deleteModalVisible} onCancel={() => setDeleteModalVisible(false)} onConfirm={handleDeleteFile} />
-    <Footer />
-  </SafeAreaView>
+      {/* 2. Reading View Container */}
+      {!loading && readingFile && !activeDeck && (
+        <View style={{ flex: 1 }}>
+          <View style={[styles.readerHeader, { borderBottomColor: theme.border }]}>
+            <TouchableOpacity 
+              style={styles.backBtn} 
+              onPress={() => { setReadingFile(null); setReadingContent(""); }}
+            >
+              <FontAwesome5 name="arrow-left" size={16} color={theme.text}/>
+              <Text style={[styles.lessonTitleLarge, { color: theme.text,marginHorizontal:10, }]} numberOfLines={1} ellipsizeMode='tail'>{readingFile.lesson}</Text>
+            </TouchableOpacity>
+
+            <View style={styles.readerActions}>
+              <TouchableOpacity 
+                style={[styles.actionChip, { backgroundColor: theme.buttons }]} 
+                onPress={() => launchDeck(readingFile.filename)}
+              >
+                <FontAwesome5 name="bolt" size={12} color={theme.accent} />
+                <Text style={[styles.actionChipText, { color: theme.accent }]}> Quiz</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.actionChip, { backgroundColor: theme.accent + '15' }]} 
+                onPress={() => copyToClipboard(readingFile.filename)}
+              >
+                <FontAwesome5 name="copy" size={12} color={theme.accent} />
+                <Text style={[styles.actionChipText, { color: theme.accent }]}>Copy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+            <Text style={[styles.noteContent, { color: theme.text }]}>{readingContent}</Text>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* 3. Selection View */}
+      {!loading && !readingFile && !activeDeck && (
+        <ModuleSelector
+          availableLessons={filesMeta}
+          launchDeck={launchDeck}
+          copyToClipboard={copyToClipboard}
+          onSelectDeleteTarget={(filename) => { setTargetFilename(filename); setDeleteModalVisible(true); }}
+          onSelectLesson={openLessonReader}
+        />
+      )}
+
+      {/* 4. Quiz Game View */}
+      {!loading && activeDeck && (
+        <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+          <View>
+            {quizFinished ? (
+              <QuizResults  
+                runningScore={runningScore} 
+                maxPossibleScore={maxPossibleScore} 
+                onReturn={() => setActiveDeck(null)} 
+              />
+            ) : (
+              <QuizCard
+                item={activeDeck[currentQuestionIdx]}
+                chosenAnswer={chosenAnswer}
+                runningScore={runningScore}
+                maxPossibleScore={maxPossibleScore}
+                setChosenAnswer={setChosenAnswer}
+                setRunningScore={setRunningScore}
+                tfSelections={tfSelections}
+                setTfSelections={setTfSelections}
+                tfChecked={tfChecked}
+                tfQuestionScore={tfQuestionScore}
+                evaluateTfQuestion={evaluateTfQuestion}
+                handleNextQuestion={handleNextQuestion}
+                currentQuestionIdx={currentQuestionIdx}
+                totalQuestions={activeDeck.length}
+              />
+            )}
+          </View>
+        </ScrollView>
+      )}
+
+      <DeleteModal visible={deleteModalVisible} onCancel={() => setDeleteModalVisible(false)} onConfirm={handleDeleteFile} />
+      <Footer />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  dropdownRow: { flexDirection: 'row', paddingHorizontal: 25, marginBottom: 20, gap: 12 },
-  dropdown: { flex: 1, height: 46, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14 },
-  dropdownText: { fontSize: 14, fontWeight: '600', flex: 1, marginRight: 8 },
   scroll: { flex: 1, paddingHorizontal: 25 },
-  label: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 15 },
-  placeholderContainer: { alignItems: 'center', marginTop: 40, paddingHorizontal: 20 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  lessonRowContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 20, borderWidth: 1, marginBottom: 10, paddingRight: 10 },
-  lessonPressable: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 18 },
-  lessonTitle: { fontSize: 16, fontWeight: '700', marginBottom: 2 },
-  deleteBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.02)' },
-  quizHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  exitRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  exitText: { fontSize: 13, fontWeight: '700' },
-  scoreBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  scoreBadgeText: { color: 'white', fontSize: 12, fontWeight: '700' },
-  progressText: { fontSize: 12, fontWeight: '600', color: 'gray', marginBottom: 12 },
+  
+  // Reader View Styles
+  readerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, marginBottom: 15 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  backText: { fontSize: 15, fontWeight: '600' },
+  readerActions: { flexDirection: 'row', gap: 8 },
+  actionChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, gap: 6 },
+  actionChipText: { fontSize: 13, fontWeight: '700' },
+  metaLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+  lessonTitleLarge: { fontSize: 20, fontWeight: '700', lineHeight: 30, textTransform: 'uppercase' },
+  divider: { height: 1, marginVertical: 16 },
+  noteContent: { fontSize: 15, lineHeight: 24, paddingBottom: 40 },
 });

@@ -89,7 +89,7 @@ export default function QuizCard({
               }
             }}
           >
-            <Text style={[styles.optionText, { color: theme.title, fontWeight: isSelected ? '700' : '400' }]}>{option}</Text>
+            <Text style={[styles.optionText, { color: theme.title, fontWeight: isSelected ? '700' : '400' }]}>{oIdx+1}. {option}</Text>
             {chosenAnswer && isCorrect && <FontAwesome5 name="check-circle" size={14} color="#4ade80" />}
             {chosenAnswer && isSelected && !isCorrect && <FontAwesome5 name="times-circle" size={14} color="#f87171" />}
           </Pressable>
@@ -147,17 +147,17 @@ export default function QuizCard({
       )}
 
       {isTFStyle && !tfChecked && (
-        <Pressable style={[styles.submitActionBtn, { backgroundColor: theme.accent }]} onPress={evaluateTfQuestion}>
-          <Text style={styles.submitActionBtnText}>Check Statements</Text>
+        <Pressable style={[styles.submitActionBtn, { backgroundColor: theme.buttons,borderWidth:1,borderColor:theme.accent }]} onPress={evaluateTfQuestion}>
+          <Text style={[styles.submitActionBtnText,{color:theme.accent}]}>Check Statements</Text>
         </Pressable>
       )}
 
       {((!isTFStyle && chosenAnswer) || (isTFStyle && tfChecked)) && (
-        <Pressable style={[styles.submitActionBtn, { backgroundColor: '#4ade80' }]} onPress={handleNextQuestion}>
-          <Text style={styles.submitActionBtnText}>
+        <Pressable style={[styles.submitActionBtn, { backgroundColor: theme.buttons,borderColor:theme.accent,borderWidth:1 }]} onPress={handleNextQuestion}>
+          <Text style={[styles.submitActionBtnText,{color:theme.accent}]}>
             {currentQuestionIdx + 1 === totalQuestions ? "View Final Results" : "Next Question"}
           </Text>
-          <FontAwesome5 name="arrow-right" size={12} color="white" style={{ marginLeft: 8 }} />
+          <FontAwesome5 name="arrow-right" size={12} color={theme.accent} style={{ marginLeft: 8 }} />
         </Pressable>
       )}
     </View>

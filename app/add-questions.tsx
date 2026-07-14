@@ -3,7 +3,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Colors } from './constants/theme';
 
@@ -24,6 +24,15 @@ export default function AddQuestions() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
+
+  // Custom Alert Modal State
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertData, setAlertData] = useState({ title: '', message: '', type: 'success', onDismiss: () => {} });
+
+  const showAlert = (title: string, message: string, type: 'success' | 'error' = 'success', onDismiss = () => {}) => {
+    setAlertData({ title, message, type, onDismiss });
+    setAlertVisible(true);
+  };
 
   // Requests document picking permissions, reads binary array values, and streams data directly to Gemini
   const handlePdfUpload = async () => {
@@ -58,7 +67,7 @@ export default function AddQuestions() {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      const prompt = "Extract and structure all core study and technical informational notes found inside this document cleanly. Omit conversational introductions. Produce clean, highly informative plain text summaries.";
+      const prompt = "Extract and structure all core study and subject related notes found inside this document cleanly. Omit unwanted text. Produce clean, highly informative plain text summaries.";
 
       // 3. Transmit base64 inline structures alongside active resolved key configuration
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${activeApiKey}`, {
@@ -87,10 +96,10 @@ export default function AddQuestions() {
       }
 
       setPlainText(extractedText);
-      Alert.alert("Success", "PDF text extracted and populated successfully.");
+      showAlert("Success", "PDF text extracted and populated successfully.", 'success');
     } catch (error) {
       console.error(error);
-      Alert.alert("Extraction Error", "Failed to parse information from the selected PDF. Please check your network or try again.");
+      showAlert("Extraction Error", "Failed to parse information from the selected PDF. Please check your network or try again.", 'error');
       setAttachedFileName(null);
     } finally {
       setProcessingPdf(false);
@@ -99,7 +108,7 @@ export default function AddQuestions() {
 
   const handleSave = async () => {
     if (!subject.trim() || !term.trim() || !lesson.trim() || !plainText.trim()) {
-      Alert.alert("Error", "Please fill in all meta fields and provide the questions data.");
+      showAlert("Error", "Please fill in all meta fields and provide the questions data.", 'error');
       return;
     }
 
@@ -114,11 +123,18 @@ export default function AddQuestions() {
 
       await FileSystem.writeAsStringAsync(fileUri, plainText);
       
-      Alert.alert("Success", "Question engine files compiled perfectly.", [
-        { text: "OK", onPress: () => router.back() }
-      ]);
+      showAlert("Success", "Question engine files compiled perfectly.", 'success', () => {
+        router.back();
+      });
     } catch (error) {
-      Alert.alert("Save Error", "Failed to write data to disk.");
+      showAlert("Save Error", "Failed to write data to disk.", 'error');
+    }
+  };
+
+  const handleModalClose = () => {
+    setAlertVisible(false);
+    if (alertData.onDismiss) {
+      alertData.onDismiss();
     }
   };
 
@@ -128,11 +144,11 @@ export default function AddQuestions() {
         <Pressable style={[styles.backBtn, { backgroundColor: theme.card }]} onPress={() => router.back()}>
           <FontAwesome5 name="arrow-left" size={16} color={theme.title} />
         </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.title }]}>Import Engine Data</Text>
+        <Text style={[styles.headerTitle, { color: theme.title }]}>Add Notes</Text>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={{ paddingBottom: 50 }} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.label, { color: theme.accent }]}>Metadata Configuration</Text>
+        <Text style={[styles.label, { color: theme.accent }]}>Note Info</Text>
         
         <TextInput 
           style={[styles.input, { backgroundColor: theme.card, color: theme.title, borderColor: theme.border }]}
@@ -155,12 +171,10 @@ export default function AddQuestions() {
           value={lesson}
           onChangeText={setLesson}
         />
-
-        <Text style={[styles.label, { color: theme.accent, marginTop: 15 }]}>Document Ingestion</Text>
         
         <Pressable 
           disabled={processingPdf}
-          style={[styles.pdfBtn, { backgroundColor: theme.card, borderColor: theme.accent }]} 
+          style={[styles.pdfBtn, { backgroundColor: theme.buttons, borderColor: theme.accent }]} 
           onPress={handlePdfUpload}
         >
           {processingPdf ? (
@@ -171,20 +185,20 @@ export default function AddQuestions() {
           ) : (
             <View style={styles.row}>
               <FontAwesome5 name="file-pdf" size={18} color={theme.accent} style={{ marginRight: 10 }} />
-              <Text style={{ color: theme.title, fontWeight: '600' }}>
-                {attachedFileName ? `Change: ${attachedFileName}` : "Upload Source Material PDF"}
+              <Text style={{ color: theme.accent, fontWeight: '600' }}>
+                {attachedFileName ? `Change: ${attachedFileName}` : "Upload PDF Notes"}
               </Text>
             </View>
           )}
         </Pressable>
 
-        <Text style={[styles.label, { color: theme.accent, marginTop: 20 }]}>Source Material Text Content</Text>
+        <Text style={[styles.label, { color: theme.accent, marginTop: 20 }]}>Text Notes</Text>
         <TextInput 
           style={[styles.textArea, { backgroundColor: theme.card, color: theme.title, borderColor: theme.border }]}
-          placeholder="Extracted data will fill here automatically, or paste your schematic framework manually..."
+          placeholder="Upload PDF to extract notes, or paste your notes manually..."
           placeholderTextColor={theme.subtext}
           multiline
-          numberOfLines={12}
+          numberOfLines={10}
           textAlignVertical="top"
           value={plainText}
           onChangeText={setPlainText}
@@ -192,27 +206,82 @@ export default function AddQuestions() {
 
         <Pressable 
           disabled={processingPdf}
-          style={[styles.submitBtn, { backgroundColor: theme.accent, opacity: processingPdf ? 0.6 : 1 }]} 
+          style={[styles.submitBtn, { backgroundColor: theme.buttons, opacity: processingPdf ? 0.6 : 1, borderColor: theme.accent, borderWidth: 1 }]} 
           onPress={handleSave}
         >
-          <Text style={styles.submitBtnText}>Compile & Commit File</Text>
+          <Text style={[styles.submitBtnText, { color: theme.accent }]}>Save Notes</Text>
         </Pressable>
       </ScrollView>
+
+      {/* THEME MATCHING CUSTOM MODAL FOR ALERTS */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={alertVisible}
+        onRequestClose={handleModalClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <View style={styles.modalHeaderRow}>
+              <FontAwesome5 
+                name={alertData.type === 'success' ? "check-circle" : "exclamation-circle"} 
+                size={20} 
+                color={alertData.type === 'success' ? "#4BB543" : "#D8000C"} 
+                style={{ marginRight: 10 }}
+              />
+              <Text style={[styles.modalTitle, { color: theme.title }]}>{alertData.title}</Text>
+            </View>
+            <Text style={[styles.modalMessage, { color: theme.subtext }]}>{alertData.message}</Text>
+            
+            <Pressable 
+              style={[styles.modalCloseBtn, { backgroundColor: theme.buttons, borderColor: theme.accent }]} 
+              onPress={handleModalClose}
+            >
+              <Text style={[styles.modalCloseBtnText, { color: theme.accent }]}>Dismiss</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 25, gap: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', padding: 20, gap: 20 },
   backBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   headerTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   scroll: { flex: 1, paddingHorizontal: 25 },
   label: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 },
   input: { height: 54, borderRadius: 16, borderWidth: 1, paddingHorizontal: 16, marginBottom: 15, fontSize: 15, fontWeight: '500' },
-  pdfBtn: { height: 54, borderRadius: 16, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  pdfBtn: { height: 54, borderRadius: 16, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
   row: { flexDirection: 'row', alignItems: 'center' },
   textArea: { minHeight: 220, borderRadius: 20, borderWidth: 1, padding: 16, fontSize: 13, fontFamily: 'monospace', marginBottom: 25 },
   submitBtn: { height: 56, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
-  submitBtnText: { color: 'white', fontSize: 16, fontWeight: '700' }
+  submitBtnText: { fontSize: 16, fontWeight: '700' },
+
+  // Custom Modal Styling
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.4)', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    paddingHorizontal: 30
+  },
+  modalContent: { 
+    width: '100%', 
+    borderRadius: 20, 
+    borderWidth: 1, 
+    padding: 24, 
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5
+  },
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '800' },
+  modalMessage: { fontSize: 14, lineHeight: 20, marginBottom: 24 },
+  modalCloseBtn: { height: 44, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  modalCloseBtnText: { fontWeight: '700', fontSize: 14 }
 });

@@ -37,6 +37,7 @@ interface ModuleSelectorProps {
   launchDeck: (filename: string) => void;
   copyToClipboard: (filename: string) => void;
   onSelectDeleteTarget: (filename: string) => void;
+  onSelectLesson: (file: Lesson) => void; // Added callback to load notes
 }
 
 export default function ModuleSelector({
@@ -44,6 +45,7 @@ export default function ModuleSelector({
   launchDeck,
   copyToClipboard,
   onSelectDeleteTarget,
+  onSelectLesson,
 }: ModuleSelectorProps) {
   const theme = Colors[useColorScheme() ?? 'light'];
 
@@ -144,7 +146,8 @@ export default function ModuleSelector({
                 {/* Muted background colored strip on Left edge */}
                 <View style={[styles.cardAccentBar, { backgroundColor: palette.bg }]} />
                 
-                <Pressable style={styles.lessonPressable} onPress={() => launchDeck(les.filename)}>
+                {/* Main Card Pressable - Triggers Note Reading View */}
+                <Pressable style={styles.lessonPressable} onPress={() => onSelectLesson(les)}>
                   <View style={{ flex: 1, paddingRight: 8 }}>
                     <Text style={[styles.lessonTitle, { color: theme.title }]}>{les.lesson}</Text>
                     <View style={styles.metaRow}>
@@ -159,15 +162,22 @@ export default function ModuleSelector({
                   </View>
                 </Pressable>
 
+                {/* Action Buttons Group */}
                 <View style={styles.actionButtonsGroup}>
-                  <Pressable style={styles.iconIconButton} onPress={() => copyToClipboard(les.filename)}>
-                    <FontAwesome5 name="copy" size={14} color={theme.subtext} />
+                  {/* Generate Questions Button (In front of Copy) */}
+                  <Pressable 
+                    style={[styles.iconIconButton,]} 
+                    onPress={() => launchDeck(les.filename)}
+                  >
+                    <FontAwesome5 name="bolt" size={16} color={theme.accent} />
                   </Pressable>
+
+                  {/* Delete Button */}
                   <Pressable
-                    style={[styles.deleteBtn, { backgroundColor: 'rgba(255,0,0,0.04)' }]}
+                    style={styles.deleteBtn}
                     onPress={() => onSelectDeleteTarget(les.filename)}
                   >
-                    <FontAwesome5 name="trash" size={13} color={theme.delete} />
+                    <FontAwesome5 name="trash" size={16} color={theme.delete} />
                   </Pressable>
                 </View>
               </View>
@@ -202,9 +212,9 @@ export default function ModuleSelector({
                 <View style={styles.chipWrapperRow}>
                   <Pressable
                     onPress={() => setSelectedSubject(null)}
-                    style={[styles.chip, !selectedSubject ? { backgroundColor: theme.accent, borderColor: theme.accent } : { borderColor: theme.border }]}
+                    style={[styles.chip, !selectedSubject ? { backgroundColor: theme.buttons, borderColor: theme.accent } : { borderColor: theme.border }]}
                   >
-                    <Text style={[styles.chipText, !selectedSubject ? { color: '#FFF' } : { color: theme.title }]}>All</Text>
+                    <Text style={[styles.chipText, !selectedSubject ? { color: theme.accent } : { color: theme.title }]}>All</Text>
                   </Pressable>
                   {uniqueSubjects.map((sub) => {
                     const isSelected = selectedSubject?.toLowerCase() === sub.toLowerCase();
@@ -212,9 +222,9 @@ export default function ModuleSelector({
                       <Pressable
                         key={sub}
                         onPress={() => setSelectedSubject(sub)}
-                        style={[styles.chip, isSelected ? { backgroundColor: theme.accent, borderColor: theme.accent } : { borderColor: theme.border }]}
+                        style={[styles.chip, isSelected ? { backgroundColor: theme.buttons, borderColor: theme.accent } : { borderColor: theme.border }]}
                       >
-                        <Text style={[styles.chipText, isSelected ? { color: '#FFF' } : { color: theme.title }]}>{sub}</Text>
+                        <Text style={[styles.chipText, isSelected ? { color: theme.accent } : { color: theme.title }]}>{sub}</Text>
                       </Pressable>
                     );
                   })}
@@ -225,9 +235,9 @@ export default function ModuleSelector({
                 <View style={styles.chipWrapperRow}>
                   <Pressable
                     onPress={() => setSelectedTerm(null)}
-                    style={[styles.chip, !selectedTerm ? { backgroundColor: theme.accent, borderColor: theme.accent } : { borderColor: theme.border }]}
+                    style={[styles.chip, !selectedTerm ? { backgroundColor: theme.buttons, borderColor: theme.accent } : { borderColor: theme.border }]}
                   >
-                    <Text style={[styles.chipText, !selectedTerm ? { color: '#FFF' } : { color: theme.title }]}>All</Text>
+                    <Text style={[styles.chipText, !selectedTerm ? { color: theme.accent } : { color: theme.title }]}>All</Text>
                   </Pressable>
                   {uniqueTerms.map((trm) => {
                     const isSelected = selectedTerm?.toLowerCase() === trm.toLowerCase();
@@ -235,9 +245,9 @@ export default function ModuleSelector({
                       <Pressable
                         key={trm}
                         onPress={() => setSelectedTerm(trm)}
-                        style={[styles.chip, isSelected ? { backgroundColor: theme.accent, borderColor: theme.accent } : { borderColor: theme.border }]}
+                        style={[styles.chip, isSelected ? { backgroundColor: theme.buttons, borderColor: theme.accent } : { borderColor: theme.border }]}
                       >
-                        <Text style={[styles.chipText, isSelected ? { color: '#FFF' } : { color: theme.title }]}>{trm}</Text>
+                        <Text style={[styles.chipText, isSelected ? { color: theme.accent } : { color: theme.title }]}>{trm}</Text>
                       </Pressable>
                     );
                   })}
@@ -279,7 +289,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     borderRadius: 16, 
     borderWidth: 1, 
-    marginBottom: 10, 
+    marginBottom: 16, 
     paddingRight: 12,
     overflow: 'hidden' // Ensures the vertical strip corners conform correctly
   },
@@ -304,7 +314,7 @@ const styles = StyleSheet.create({
   sheetContentContainer: { padding: 24 },
   sheetGroupLabel: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
   chipWrapperRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
+  chip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: '600' },
   sheetFooterActions: { flexDirection: 'row', gap: 12, marginTop: 40, marginBottom: 20 },
   actionBtnSecondary: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },

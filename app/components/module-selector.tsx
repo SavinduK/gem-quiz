@@ -11,7 +11,19 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
-import { Colors } from '../constants/theme';
+import { Colors, SUBJECT_PALETTES } from '../constants/theme';
+
+// Helper to consistently assign one of the 6 palettes based on the subject name string
+const getSubjectPalette = (subject: string) => {
+  if (!subject) return SUBJECT_PALETTES[0];
+  let hash = 0;
+  const cleanSubject = subject.toLowerCase().trim();
+  for (let i = 0; i < cleanSubject.length; i++) {
+    hash = cleanSubject.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % SUBJECT_PALETTES.length;
+  return SUBJECT_PALETTES[index];
+};
 
 interface Lesson {
   filename: string;
@@ -42,7 +54,6 @@ export default function ModuleSelector({
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
   // --- DYNAMIC DATA PARSING FOR FILTERS ---
-  // Automatically gets unique lists of subjects and terms from the raw files array
   const { uniqueSubjects, uniqueTerms } = useMemo(() => {
     const subjects = new Set<string>();
     const terms = new Set<string>();
@@ -77,7 +88,6 @@ export default function ModuleSelector({
   }, [searchQuery, selectedSubject, selectedTerm, availableLessons]);
 
   const hasFilter = selectedSubject || selectedTerm;
-  const filterLabel = [selectedSubject, selectedTerm].filter(Boolean).join(' • ');
 
   // Clear helper to wipe filters back to default
   const resetFilters = () => {
@@ -127,31 +137,42 @@ export default function ModuleSelector({
             </Text>
           </View>
         ) : (
-          displayedLessons.map((les) => (
-            <View key={les.filename} style={[styles.lessonRowContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Pressable style={styles.lessonPressable} onPress={() => launchDeck(les.filename)}>
-                <View style={{ flex: 1, paddingRight: 8 }}>
-                  <Text style={[styles.lessonTitle, { color: theme.title }]}>{les.lesson}</Text>
-                  <Text style={{ color: theme.subtext, fontSize: 12,textTransform:'capitalize' }}>
-                    {les.subject} | Term {les.term}
-                  </Text>
-                  
-                </View>
-              </Pressable>
+          displayedLessons.map((les) => {
+            const palette = getSubjectPalette(les.subject);
+            return (
+              <View key={les.filename} style={[styles.lessonRowContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                {/* Muted background colored strip on Left edge */}
+                <View style={[styles.cardAccentBar, { backgroundColor: palette.bg }]} />
+                
+                <Pressable style={styles.lessonPressable} onPress={() => launchDeck(les.filename)}>
+                  <View style={{ flex: 1, paddingRight: 8 }}>
+                    <Text style={[styles.lessonTitle, { color: theme.title }]}>{les.lesson}</Text>
+                    <View style={styles.metaRow}>
+                      <Text style={[styles.subjectText, { color: theme.subtext }]}>
+                        {les.subject}
+                      </Text>
+                      <Text style={{ color: theme.subtext, fontSize: 12 }}>|</Text>
+                      <Text style={{ color: theme.subtext, fontSize: 12 }}>
+                        Term {les.term}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
 
-              <View style={styles.actionButtonsGroup}>
-                <Pressable style={styles.iconIconButton} onPress={() => copyToClipboard(les.filename)}>
-                  <FontAwesome5 name="copy" size={14} color={theme.subtext} />
-                </Pressable>
-                <Pressable
-                  style={[styles.deleteBtn, { backgroundColor: 'rgba(255,0,0,0.04)' }]}
-                  onPress={() => onSelectDeleteTarget(les.filename)}
-                >
-                  <FontAwesome5 name="trash" size={13} color={theme.delete} />
-                </Pressable>
+                <View style={styles.actionButtonsGroup}>
+                  <Pressable style={styles.iconIconButton} onPress={() => copyToClipboard(les.filename)}>
+                    <FontAwesome5 name="copy" size={14} color={theme.subtext} />
+                  </Pressable>
+                  <Pressable
+                    style={[styles.deleteBtn, { backgroundColor: 'rgba(255,0,0,0.04)' }]}
+                    onPress={() => onSelectDeleteTarget(les.filename)}
+                  >
+                    <FontAwesome5 name="trash" size={13} color={theme.delete} />
+                  </Pressable>
+                </View>
               </View>
-            </View>
-          ))
+            );
+          })
         )}
       </ScrollView>
 
@@ -241,8 +262,8 @@ export default function ModuleSelector({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  searchBarRow: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 12, marginTop: 16, gap: 10 },
+  container: { flex: 1,paddingVertical:10 },
+  searchBarRow: { flexDirection: 'row', paddingHorizontal: 20,paddingVertical:10, gap: 10 },
   searchContainer: { flex: 1, height: 48, borderRadius: 14, borderWidth: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14 },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, fontSize: 15, height: '100%', paddingVertical: 0 },
@@ -251,11 +272,25 @@ const styles = StyleSheet.create({
   activeFilterBadgeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 22, marginBottom: 12 },
   filterIndicatorText: { fontSize: 13, flex: 1 },
   resetBadgeBtn: { marginLeft: 10, paddingVertical: 2, paddingHorizontal: 6 },
-  feedBody: { flexGrow:1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30 },
+  feedBody: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30 },
   sectionLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 14 },
-  lessonRowContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, borderWidth: 1, marginBottom: 10, paddingRight: 12 },
-  lessonPressable: { flex: 1, padding: 16 },
-  lessonTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4, lineHeight: 20,textTransform:'capitalize' },
+  lessonRowContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    marginBottom: 10, 
+    paddingRight: 12,
+    overflow: 'hidden' // Ensures the vertical strip corners conform correctly
+  },
+  cardAccentBar: {
+    width: 6,
+    alignSelf: 'stretch',
+  },
+  lessonPressable: { flex: 1, paddingVertical: 16, paddingLeft: 12, paddingRight: 8 },
+  lessonTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4, lineHeight: 20, textTransform: 'uppercase' },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  subjectText: { fontSize: 12, textTransform: 'capitalize', fontWeight: '500' },
   actionButtonsGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   iconIconButton: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   deleteBtn: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },

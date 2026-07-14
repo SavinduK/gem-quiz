@@ -28,20 +28,40 @@ export default function QuizCard({
   const isTFStyle = Array.isArray(item.statements);
   const theme = Colors[useColorScheme() ?? 'light'];
 
+  // Calculate percentage progress
+  const progressPercent = totalQuestions > 0 
+    ? ((currentQuestionIdx + 1) / totalQuestions) * 100 
+    : 0;
+
   return (
     <View style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
       
-      {/* HEADER SECTION */}
+      {/* HEADER SECTION (Progress Text, Progress Bar, & Score in One Row) */}
       <View style={styles.quizHeaderRow}> 
-        <Text style={[styles.progressText, { color: theme.title }]}>
-           {currentQuestionIdx + 1} \ {totalQuestions}
-        </Text>
-        <View style={[styles.scoreBadge, { backgroundColor: theme.accent }]}>
-          <Text style={styles.scoreBadgeText}>Score: {runningScore} / {maxPossibleScore}</Text>
+
+        <View style={[styles.progressBarContainer, { backgroundColor: theme.border }]}>
+          <View 
+            style={[
+              styles.progressBarFill, 
+              { 
+                width: `${progressPercent}%`, 
+                backgroundColor: theme.accent 
+              }
+            ]} 
+          />
+        </View>
+
+        <View style={styles.scoreBadge}>
+          <Text style={[styles.scoreBadgeText, { color: theme.accent }]}>
+             {runningScore} / {maxPossibleScore}
+          </Text>
         </View>
       </View>
 
-      <Text style={[styles.quizQuestion, { color: theme.title }]}>{item.question}</Text>
+      {/* QUESTION SECTION WITH NUMBER PREFIX */}
+      <Text style={[styles.quizQuestion, { color: theme.title }]}>
+        {currentQuestionIdx + 1}. {item.question}
+      </Text>
       
       {/* STANDARD MCQ */}
       {!isTFStyle && item.options.map((option: string, oIdx: number) => {
@@ -145,21 +165,35 @@ export default function QuizCard({
 }
 
 const styles = StyleSheet.create({
-    quizCard: { padding: 20, borderRadius: 22, borderWidth: 1, marginBottom: 16,marginTop:12,},
-    quizHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, width: '100%' },
-    progressText: { fontSize: 13, fontWeight: '600', opacity: 0.8 },
-    scoreBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-    scoreBadgeText: { color: 'white', fontSize: 12, fontWeight: '700' },
-    quizQuestion: { fontSize: 16, fontWeight: '700', marginBottom: 18, lineHeight: 22 },
-    optionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
-    optionText: { fontSize: 14, flex: 1, paddingRight: 10 },
-    tfStatementRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 10, gap: 10 },
-    tfStatementText: { fontSize: 13, lineHeight: 18 },
-    tfFeedbackText: { fontSize: 11, fontWeight: '600', marginTop: 3 },
-    tfActionToggleGroup: { flexDirection: 'row', gap: 6 },
-    tfToggleBtn: { width: 28, height: 28, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.04)', justifyContent: 'center', alignItems: 'center' },
-    tfQuestionScoreBadge: { width: '100%', padding: 12, borderRadius: 12, alignItems: 'center', marginTop: 6, marginBottom: 2 },
-    tfQuestionScoreText: { fontSize: 13, fontWeight: '600' },
-    submitActionBtn: { height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14 },
-    submitActionBtnText: { color: 'white', fontWeight: '700', fontSize: 14 },
-  });
+  quizCard: { padding: 20, borderRadius: 22, borderWidth: 1, marginBottom: 16, marginTop: 12 },
+  quizHeaderRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    marginBottom: 18, 
+    width: '100%', 
+    gap: 12 
+  },
+  progressText: { fontSize: 13, fontWeight: '600', opacity: 0.8 },
+  progressBarContainer: { 
+    flex: 1, 
+    height: 6, 
+    borderRadius: 3, 
+    overflow: 'hidden' 
+  },
+  progressBarFill: { height: '100%', borderRadius: 3 },
+  scoreBadge: { justifyContent: 'center' },
+  scoreBadgeText: { fontSize: 13, fontWeight: '700' },
+  quizQuestion: { fontSize: 16, fontWeight: '700', marginBottom: 18, lineHeight: 22 },
+  optionButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 8 },
+  optionText: { fontSize: 14, flex: 1, paddingRight: 10 },
+  tfStatementRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 14, borderWidth: 1, marginBottom: 10, gap: 10 },
+  tfStatementText: { fontSize: 13, lineHeight: 18 },
+  tfFeedbackText: { fontSize: 11, fontWeight: '600', marginTop: 3 },
+  tfActionToggleGroup: { flexDirection: 'row', gap: 6 },
+  tfToggleBtn: { width: 28, height: 28, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.04)', justifyContent: 'center', alignItems: 'center' },
+  tfQuestionScoreBadge: { width: '100%', padding: 12, borderRadius: 12, alignItems: 'center', marginTop: 6, marginBottom: 2 },
+  tfQuestionScoreText: { fontSize: 13, fontWeight: '600' },
+  submitActionBtn: { height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  submitActionBtnText: { color: 'white', fontWeight: '700', fontSize: 14 },
+});

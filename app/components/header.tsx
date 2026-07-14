@@ -1,28 +1,29 @@
-import { FontAwesome5 } from '@expo/vector-icons'; // Or wherever your FontAwesome5 comes from
+import { FontAwesome5 } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { Colors } from '../constants/theme';
 
 interface HeaderProps {
   title: string;
-  onRightButtonPress?: () => void; // Optional prop
+  onRightButtonPress?: () => void;
 }
 
-export default function Header({ title,  onRightButtonPress }: HeaderProps) {
+export default function Header({ title, onRightButtonPress }: HeaderProps) {
   const theme = Colors[useColorScheme() ?? 'light'];
+
   return (
-    <View style={styles.header}>
+    <View style={[styles.header,{borderColor:theme.border}]}>
       <Text style={[styles.headerTitle, { color: theme.title }]}>
         {title}
       </Text>
       
-      {/* Only render the button if an action is provided */}
       {onRightButtonPress && (
         <Pressable 
-          style={[styles.addBtn, { backgroundColor: theme.background }]} 
+          style={styles.addBtn} 
           onPress={onRightButtonPress}
         >
-          <FontAwesome5 name="plus" size={18} color="white" />
+          {/* Changed color from "white" to your custom purple */}
+          <FontAwesome5 name="plus" size={12} color="#C084FC" />
         </Pressable>
       )}
     </View>
@@ -30,7 +31,28 @@ export default function Header({ title,  onRightButtonPress }: HeaderProps) {
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 25, paddingTop: 20,marginBottom:5 },
-  headerTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  addBtn: { width: 40, height: 40, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 25, 
+    paddingTop: 20,
+    paddingBottom: 15, 
+    borderBottomWidth:1
+  },
+  headerTitle: { 
+    fontSize: 24, 
+    fontWeight: '800', 
+    letterSpacing: -0.5 
+  },
+  addBtn: { 
+    width: 35, 
+    height: 35, 
+    borderRadius: 8,
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: 'rgba(192, 132, 252, 0.15)', 
+    borderWidth: 1,
+    borderColor: '#C084FC', 
+  },
 });

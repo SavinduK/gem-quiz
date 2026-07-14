@@ -2,9 +2,10 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Footer from './components/footer';
+import Header from './components/header';
 import { Colors } from './constants/theme';
 
 const KEY_FILE_URI = `${FileSystem.documentDirectory}key.txt`;
@@ -14,16 +15,18 @@ export default function Settings() {
   const theme = Colors[colorScheme ?? 'light'];
 
   const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [qCount, setQCount] = useState<number>(5);
   const [qStyle, setQStyle] = useState<'MCQ' | 'TF'>('MCQ');
   const [customPrompt, setCustomPrompt] = useState('');
-  
-  const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // States to manage section collapsibility
+  const [aiExpanded, setAiExpanded] = useState(false);
+  const [quizExpanded, setQuizExpanded] = useState(true);
 
   // Load configuration parsing lines from key.txt
   const loadSettings = async () => {
-    setLoading(true);
     try {
       const fileInfo = await FileSystem.getInfoAsync(KEY_FILE_URI);
       if (fileInfo.exists) {
@@ -35,8 +38,6 @@ export default function Settings() {
       }
     } catch (e) {
       console.error("Failed to load settings:", e);
-    } finally {
-      loading && setLoading(false);
     }
   };
 
@@ -51,7 +52,6 @@ export default function Settings() {
     try {
       const cleanKey = apiKey.trim();
       const cleanPrompt = customPrompt.trim();
-      // Added custom prompt as the 4th line in the plain-text configuration payload
       const configPayload = `${cleanKey}\n${qCount}\n${qStyle}\n${cleanPrompt}`;
       await FileSystem.writeAsStringAsync(KEY_FILE_URI, configPayload);
       
@@ -66,88 +66,127 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Text style={[styles.headerTitle, { color: theme.title }]}>Configuration Settings</Text>
-      </View>
+     <Header title='Configuraton Settings'/>
 
-      {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.accent} />
-        </View>
-      ) : (
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
-          
-          {/* CARD 1: AI ENGINE CREDENTIALS */}
-          <Text style={[styles.sectionTitle, { color: theme.accent }]}>AI Engine Configuration</Text>
-          <View style={[styles.configCard, { backgroundColor: theme.background, borderColor: theme.border, marginBottom: 20 }]}>
+      <View style={styles.content}>
+        
+        {/* SECTION 1: AI ENGINE CREDENTIALS */}
+        <Pressable 
+          style={styles.accordionHeader} 
+          onPress={() => setAiExpanded(!aiExpanded)}
+        >
+          <Text style={[styles.sectionTitle, { color: theme.accent }]}>AI settings</Text>
+          <FontAwesome5 
+            name={aiExpanded ? "chevron-up" : "chevron-down"} 
+            size={12} 
+            color={theme.accent} 
+          />
+        </Pressable>
+
+        {aiExpanded && (
+          <View style={styles.configCard}>
             <View style={styles.labelRow}>
-              <FontAwesome5 name="key" size={14} color={theme.subtext} style={{ marginRight: 8 }} />
               <Text style={[styles.inputLabel, { color: theme.title }]}>Gemini API Key</Text>
             </View>
-            <TextInput
-              style={[styles.input, { color: theme.title, borderColor: theme.border, backgroundColor: theme.background }]}
-              placeholder="Paste your Gemini API key here"
-              placeholderTextColor={theme.subtext}
-              value={apiKey}
-              onChangeText={setApiKey}
-              autoCapitalize="none"
-              autoCorrect={false}
-              secureTextEntry={true} 
-            />
-          </View>
 
-          {/* CARD 2: QUIZ GENERATION SETTINGS */}
+            <View style={[styles.inputContainer, { borderColor: theme.border, backgroundColor: theme.background }]}>
+              <TextInput
+                style={[styles.flexInput, { color: theme.title }]}
+                placeholder="Paste your Gemini API key here"
+                placeholderTextColor={theme.subtext}
+                value={apiKey}
+                onChangeText={setApiKey}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry={!showApiKey} 
+              />
+              <Pressable 
+                onPress={() => setShowApiKey(!showApiKey)} 
+                style={styles.eyeBtn}
+                hitSlop={8}
+              >
+                <FontAwesome5 name={showApiKey ? "eye" : "eye-slash"} size={15} color={theme.subtext} />
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {/* SECTION SEPARATOR HORIZONTAL BAR */}
+        <View style={[styles.horizontalBar, { backgroundColor: theme.border }]} />
+
+        {/* SECTION 2: QUIZ GENERATION SETTINGS */}
+        <Pressable 
+          style={styles.accordionHeader} 
+          onPress={() => setQuizExpanded(!quizExpanded)}
+        >
           <Text style={[styles.sectionTitle, { color: theme.accent }]}>Quiz Settings</Text>
-          <View style={[styles.configCard, { backgroundColor: theme.background, borderColor: theme.border }]}>
+          <FontAwesome5 
+            name={quizExpanded ? "chevron-up" : "chevron-down"} 
+            size={12} 
+            color={theme.accent} 
+          />
+        </Pressable>
+
+        {quizExpanded && (
+          <View style={styles.configCard}>
+            
             {/* QUESTION COUNT SELECTOR */}
-            <Text style={[styles.inputLabel, { color: theme.title }]}>Number of Questions</Text>
-            <View style={styles.segmentedControl}>
-              {[5, 10, 15, 20].map((num) => (
-                <Pressable
-                  key={num}
-                  style={[styles.segmentBtn, qCount === num && { backgroundColor: theme.accent }]}
-                  onPress={() => setQCount(num)}
-                >
-                  <Text style={[styles.segmentText, { color: qCount === num ? '#fff' : theme.title }]}>{num}</Text>
-                </Pressable>
-              ))}
+            <View style={styles.settingRow}>
+              <Text style={[styles.inputLabel, { color: theme.title, marginBottom: 8 }]}>Number of Questions</Text>
+              <View style={[styles.segmentedControl, { borderColor: theme.border }]}>
+                {[5, 10, 15, 20].map((num, idx) => (
+                  <React.Fragment key={num}>
+                    {idx > 0 && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+                    <Pressable
+                      style={[styles.segmentBtn, qCount === num && { backgroundColor: theme.buttons }]}
+                      onPress={() => setQCount(num)}
+                    >
+                      <Text style={[styles.segmentText, { color: qCount === num ? '#fff' : theme.title }]}>{num}</Text>
+                    </Pressable>
+                  </React.Fragment>
+                ))}
+              </View>
             </View>
 
             {/* QUESTION STYLE SELECTOR */}
-            <Text style={[styles.inputLabel, { color: theme.title, marginTop: 10 }]}>Question Architecture Style</Text>
-            <View style={styles.segmentedControl}>
-              <Pressable
-                style={[styles.segmentBtn, { flex: 1 }, qStyle === 'MCQ' && { backgroundColor: theme.accent }]}
-                onPress={() => setQStyle('MCQ')}
-              >
-                <Text style={[styles.segmentText, { color: qStyle === 'MCQ' ? '#fff' : theme.title }]}>MCQ</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.segmentBtn, { flex: 1 }, qStyle === 'TF' && { backgroundColor: theme.accent }]}
-                onPress={() => setQStyle('TF')}
-              >
-                <Text style={[styles.segmentText, { color: qStyle === 'TF' ? '#fff' : theme.title }]}>T/F Style</Text>
-              </Pressable>
+            <View style={styles.settingRow}>
+              <Text style={[styles.inputLabel, { color: theme.title, marginBottom: 8 }]}>Question Type</Text>
+              <View style={[styles.segmentedControl, { borderColor: theme.border }]}>
+                <Pressable
+                  style={[styles.segmentBtn, { flex: 1 }, qStyle === 'MCQ' && { backgroundColor: theme.buttons}]}
+                  onPress={() => setQStyle('MCQ')}
+                >
+                  <Text style={[styles.segmentText, { color: qStyle === 'MCQ' ? '#fff' : theme.title }]}>MCQ</Text>
+                </Pressable>
+                <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                <Pressable
+                  style={[styles.segmentBtn, { flex: 1 }, qStyle === 'TF' && { backgroundColor: theme.buttons }]}
+                  onPress={() => setQStyle('TF')}
+                >
+                  <Text style={[styles.segmentText, { color: qStyle === 'TF' ? '#fff' : theme.title }]}>T/F Style</Text>
+                </Pressable>
+              </View>
             </View>
 
             {/* CUSTOM SYSTEM PROMPT */}
-            <View style={[styles.labelRow, { marginTop: 10 }]}>
-              <FontAwesome5 name="terminal" size={12} color={theme.subtext} style={{ marginRight: 8 }} />
-              <Text style={[styles.inputLabel, { color: theme.title }]}>Custom Generation Instructions</Text>
+            <View style={styles.settingRow}>
+              <View style={[styles.labelRow, { marginBottom: 8 }]}>
+                <Text style={[styles.inputLabel, { color: theme.title }]}>Custom Generation Instructions</Text>
+              </View>
+              <TextInput
+                style={[styles.textArea, { color: theme.title, borderColor: theme.border, backgroundColor: theme.background }]}
+                placeholder="e.g., Focus heavily on clinical diagnostics..."
+                placeholderTextColor={theme.subtext}
+                value={customPrompt}
+                onChangeText={setCustomPrompt}
+                multiline={true}
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
             </View>
-            <TextInput
-              style={[styles.textArea, { color: theme.title, borderColor: theme.border, backgroundColor: theme.background }]}
-              placeholder="e.g., Focus heavily on clinical diagnostics, keep tone academic..."
-              placeholderTextColor={theme.subtext}
-              value={customPrompt}
-              onChangeText={setCustomPrompt}
-              multiline={true}
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
 
             <Pressable 
-              style={[styles.saveBtn, { backgroundColor: theme.accent, opacity: isSaving ? 0.7 : 1 }]} 
+              style={[styles.saveBtn, { backgroundColor: theme.buttons, opacity: isSaving ? 0.7 : 1 }]} 
               onPress={handleSaveSettings}
               disabled={isSaving}
             >
@@ -161,8 +200,9 @@ export default function Settings() {
               )}
             </Pressable>
           </View>
-        </ScrollView>
+        
       )}
+      </View>
       <Footer/>
     </SafeAreaView>
   );
@@ -170,20 +210,45 @@ export default function Settings() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 25 },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 25, paddingTop: 25, paddingBottom: 25 },
   headerTitle: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  content: { flex: 1, paddingHorizontal: 25, paddingTop: 10 },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  sectionTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10, marginLeft: 5 },
-  configCard: { padding: 5, borderRadius: 24,  gap: 12 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  inputLabel: { fontSize: 14, fontWeight: '700' },
-  input: { height: 48, borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, fontSize: 14 },
-  textArea: { minHeight: 90, borderRadius: 14, borderWidth: 1, padding: 14, fontSize: 14, lineHeight: 20 },
-  segmentedControl: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 4, gap: 4 },
-  segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
+  content: { flex: 1, paddingHorizontal: 25,paddingVertical:20 },
+  accordionHeader: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingVertical: 10,
+    paddingRight: 5
+  },
+  sectionTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginLeft: 5 },
+  horizontalBar: { height: 1, width: '100%', marginVertical: 14, opacity: 0.6 },
+  configCard: { paddingVertical: 10, paddingHorizontal: 5, gap: 16 },
+  settingRow: { gap: 2 },
+  labelRow: { flexDirection: 'row', alignItems: 'center' },
+  inputLabel: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
+  inputContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    height: 48, 
+    borderRadius: 14, 
+    borderWidth: 1, 
+    paddingLeft: 16, 
+    overflow: 'hidden',
+    marginTop: 8
+  },
+  flexInput: { flex: 1, height: '100%', fontSize: 14 },
+  eyeBtn: { height: '100%', paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center' },
+  textArea: { minHeight: 80, borderRadius: 14, borderWidth: 1, padding: 14, fontSize: 14, lineHeight: 20 },
+  segmentedControl: { 
+    flexDirection: 'row', 
+    backgroundColor: 'rgba(0,0,0,0.02)', 
+    borderRadius: 14, 
+    borderWidth: 1, 
+    padding: 4 
+  },
+  segmentBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   segmentText: { fontSize: 13, fontWeight: '600' },
-  hintText: { fontSize: 12, lineHeight: 18, opacity: 0.8 },
-  saveBtn: { height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+  divider: { width: 1, height: '50%', alignSelf: 'center' },
+  saveBtn: { height: 48, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12 },
   saveBtnText: { color: 'white', fontWeight: '700', fontSize: 15 }
 });
